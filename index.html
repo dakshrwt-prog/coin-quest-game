@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Coin Quest — Playable Prototype</title>
+<style>
+:root{--navy:#10182d;--panel:#182541;--mint:#70f0c1;--gold:#ffd166;--pink:#ff7195;--text:#f6f7fb;--muted:#b8c3dc}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top,#263c63,#10182d 62%);font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:var(--text);min-height:100vh;display:grid;place-items:center;padding:20px}
+.app{width:min(900px,100%)}header{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap}h1{margin:0;font-size:clamp(1.5rem,4vw,2.25rem);letter-spacing:-.04em}.sub{color:var(--muted);font-size:.92rem}.pill{border:1px solid #405273;border-radius:999px;padding:7px 12px;color:var(--mint);font-weight:700;font-size:.8rem}
+.hud{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px}.stat{background:#182541;border:1px solid #344565;padding:10px 15px;border-radius:14px;min-width:100px}.stat span{display:block;color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.08em}.stat strong{font-size:1.2rem}
+.stage{position:relative;background:#101a30;border:2px solid #405273;border-radius:20px;overflow:hidden;box-shadow:0 18px 50px #0005}canvas{display:block;width:100%;height:auto;touch-action:none}.overlay{position:absolute;inset:0;background:#0b1226dd;display:grid;place-items:center;padding:20px;text-align:center}.overlay.hidden{display:none}.dialog{max-width:440px}.dialog h2{font-size:clamp(1.8rem,5vw,3rem);margin:0 0 8px}.dialog p{color:#d4deef;line-height:1.55}.btn{background:var(--mint);color:#102037;border:0;border-radius:12px;padding:12px 20px;font-weight:800;font-size:1rem;cursor:pointer;box-shadow:0 4px 0 #36b98d}.btn:hover{filter:brightness(1.06);transform:translateY(-1px)}.hint{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;color:var(--muted);font-size:.85rem;margin:12px 2px}.mobile-controls{display:none;justify-content:center;gap:10px;margin-top:12px}.mobile-controls button{width:62px;height:52px;border:1px solid #405273;background:#182541;color:white;border-radius:13px;font-size:1.4rem;touch-action:manipulation}@media(max-width:620px){.mobile-controls{display:flex}.stat{flex:1;min-width:75px}.hint{font-size:.78rem}}
+</style>
+</head>
+<body>
+<main class="app">
+<header><div><h1>🪙 Coin Quest</h1><div class="sub">A tiny arcade game about collecting, dodging, and trying again.</div></div><div class="pill">PLAYABLE PROTOTYPE · v1.0</div></header>
+<section class="hud" aria-label="Game stats">
+<div class="stat"><span>Score</span><strong id="score">0</strong></div><div class="stat"><span>Target</span><strong id="target">10</strong></div><div class="stat"><span>Time</span><strong id="time">45s</strong></div><div class="stat"><span>Lives</span><strong id="lives">❤️❤️❤️</strong></div>
+</section>
+<div class="stage">
+<canvas id="game" width="800" height="470" aria-label="Coin Quest game area"></canvas>
+<div class="overlay" id="overlay"><div class="dialog"><h2 id="overlayTitle">Ready, explorer?</h2><p id="overlayText">Collect 10 gold coins before the timer runs out. Avoid the red hazards — you have 3 lives. Move with ← → or A/D, and use the buttons on mobile.</p><button class="btn" id="startBtn">Start game</button></div></div>
+</div>
+<div class="mobile-controls"><button id="leftBtn" aria-label="Move left">←</button><button id="jumpBtn" aria-label="Move up">↑</button><button id="rightBtn" aria-label="Move right">→</button></div>
+<div class="hint"><span>⌨️ Controls: Arrow keys / WASD</span><span>✨ Feedback: coin sparkle · hit flash · win/lose screen</span><span>Press R to restart</span></div>
+</main>
+<script>
+(()=>{
+const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
+const $=id=>document.getElementById(id);
+const W=canvas.width,H=canvas.height;
+let player,coins,hazards,score,lives,timeLeft,playing,won,lastTime,keys={},flash=0,particles=[];
+const target=10;
+function reset(){player={x:W/2,y:H-58,r:17,speed:290,invuln:0};coins=[];hazards=[];particles=[];score=0;lives=3;timeLeft=45;playing=false;won=false;flash=0;for(let i=0;i<5;i++)spawnCoin();for(let i=0;i<4;i++)spawnHazard();hud();draw();}
+function rand(a,b){return Math.random()*(b-a)+a}
+function spawnCoin(){coins.push({x:rand(35,W-35),y:rand(45,H-100),r:11,phase:rand(0,6.28)})}
+function spawnHazard(){hazards.push({x:rand(30,W-30),y:rand(35,H-115),r:15,vx:rand(-100,100)||70,vy:rand(-85,85)||55})}
+function hud(){$('score').textContent=score;$('target').textContent=target;$('time').textContent=Math.ceil(timeLeft)+'s';$('lives').textContent='❤️'.repeat(lives)+'🖤'.repeat(3-lives)}
+function showOverlay(title,text,button){$('overlayTitle').textContent=title;$('overlayText').textContent=text;$('startBtn').textContent=button;$('overlay').classList.remove('hidden')}
+function hideOverlay(){$('overlay').classList.add('hidden')}
+function start(){reset();playing=true;lastTime=performance.now();hideOverlay();requestAnimationFrame(loop)}
+function end(win){playing=false;won=win;showOverlay(win?'🎉 Treasure secured!':'💫 Run over!',win?'You collected all 10 coins. Great reflexes! Press play to try for a faster run.':'You ran out of time or lives. Try again — learn the hazard paths and keep moving.','Play again')}
+function circle(x,y,r,color){ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fillStyle=color;ctx.fill()}
+function draw(){
+ctx.clearRect(0,0,W,H);
+const grad=ctx.createLinearGradient(0,0,0,H);grad.addColorStop(0,'#172849');grad.addColorStop(1,'#101a30');ctx.fillStyle=grad;ctx.fillRect(0,0,W,H);
+ctx.strokeStyle='#294064';ctx.lineWidth=1;for(let x=20;x<W;x+=40){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke()}for(let y=20;y<H;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke()}
+coins.forEach(c=>{let r=c.r+Math.sin(c.phase)*1.5;circle(c.x,c.y,r+4,'#ffd16622');circle(c.x,c.y,r,'#ffd166');circle(c.x-3,c.y-3,r*.35,'#fff0ad');ctx.fillStyle='#9b6414';ctx.font='bold 11px system-ui';ctx.textAlign='center';ctx.fillText('$',c.x,c.y+4)});
+hazards.forEach(h=>{circle(h.x,h.y,h.r+4,'#ff719522');circle(h.x,h.y,h.r,'#ff7195');ctx.strokeStyle='#7e2948';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(h.x-6,h.y-6);ctx.lineTo(h.x+6,h.y+6);ctx.moveTo(h.x+6,h.y-6);ctx.lineTo(h.x-6,h.y+6);ctx.stroke()});
+if(player){if(player.invuln<=0||Math.floor(performance.now()/90)%2===0){circle(player.x,player.y,player.r+5,'#70f0c122');circle(player.x,player.y,player.r,'#70f0c1');circle(player.x-5,player.y-5,5,'#d7fff0');ctx.fillStyle='#102037';ctx.beginPath();ctx.arc(player.x-5,player.y-1,2,0,7);ctx.arc(player.x+5,player.y-1,2,0,7);ctx.fill();}}
+particles.forEach(p=>{ctx.globalAlpha=Math.max(0,p.life/.45);circle(p.x,p.y,p.r,'#ffd166');ctx.globalAlpha=1});
+ctx.fillStyle='#d4deef';ctx.font='13px system-ui';ctx.textAlign='left';ctx.fillText('Collect the gold. Avoid the red.',18,H-16);
+}
+function loop(now){if(!playing)return;let dt=Math.min((now-lastTime)/1000,.035);lastTime=now;update(dt);draw();if(playing)requestAnimationFrame(loop)}
+function update(dt){
+timeLeft-=dt;if(timeLeft<=0){timeLeft=0;hud();end(false);return}
+let dx=0,dy=0;if(keys.ArrowLeft||keys.a||keys.A)dx--;if(keys.ArrowRight||keys.d||keys.D)dx++;if(keys.ArrowUp||keys.w||keys.W)dy--;if(keys.ArrowDown||keys.s||keys.S)dy++;let mag=Math.hypot(dx,dy)||1;player.x+=dx/mag*player.speed*dt;player.y+=dy/mag*player.speed*dt;player.x=Math.max(player.r,Math.min(W-player.r,player.x));player.y=Math.max(player.r,Math.min(H-player.r,player.y));player.invuln=Math.max(0,player.invuln-dt);
+coins.forEach(c=>c.phase+=dt*5);
+hazards.forEach(h=>{h.x+=h.vx*dt;h.y+=h.vy*dt;if(h.x<h.r||h.x>W-h.r)h.vx*=-1;if(h.y<h.r||h.y>H-100)h.vy*=-1});
+for(let i=coins.length-1;i>=0;i--){let c=coins[i];if(Math.hypot(c.x-player.x,c.y-player.y)<c.r+player.r){score++;for(let j=0;j<9;j++)particles.push({x:c.x,y:c.y,vx:rand(-100,100),vy:rand(-120,40),r:rand(2,4),life:.45});coins.splice(i,1);spawnCoin();if(score>=target){hud();end(true);return}}}
+if(player.invuln<=0){for(const h of hazards){if(Math.hypot(h.x-player.x,h.y-player.y)<h.r+player.r){lives--;player.invuln=1.1;flash=.2;if(lives<=0){hud();end(false);return}break}}}
+particles.forEach(p=>{p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt});particles=particles.filter(p=>p.life>0);flash=Math.max(0,flash-dt);hud();
+}
+window.addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' '].includes(e.key))e.preventDefault();keys[e.key]=true;if((e.key==='r'||e.key==='R')&&!playing)start()});
+window.addEventListener('keyup',e=>keys[e.key]=false);
+function hold(id,key){const b=$(id);const down=e=>{e.preventDefault();keys[key]=true};const up=e=>{e.preventDefault();keys[key]=false};b.addEventListener('pointerdown',down);b.addEventListener('pointerup',up);b.addEventListener('pointerleave',up);b.addEventListener('pointercancel',up)}
+hold('leftBtn','ArrowLeft');hold('rightBtn','ArrowRight');hold('jumpBtn','ArrowUp');
+$('startBtn').addEventListener('click',start);
+reset();
+})();
+</script>
+</body></html>
